@@ -43,7 +43,6 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.WARNING, format="%(levelname)s: %(message)s")
     try:
         main()
     except Exception as exc:

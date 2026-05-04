@@ -1,11 +1,13 @@
 import logging
 import time
-from typing import Any
+from typing import cast
 
-from litellm import completion
+from litellm import completion, exceptions as litellm_exceptions
+from litellm.types.utils import ModelResponse
 from tenacity import (
+    before_sleep_log,
     retry,
-    retry_if_exception,
+    retry_if_exception_type,
     stop_after_attempt,
     wait_random_exponential,
 )
@@ -13,42 +15,46 @@ from tenacity import (
 from cost import get_cost_usd
 from entities import EvalConfig, ModelSummary, PromptCase, PromptResult
 
+logger = logging.getLogger(__name__)
 
-def extract_text(response: Any) -> str:
-    try:
-        content = response.choices[0].message.content
-        if isinstance(content, str):
-            return content.strip()
-    except (AttributeError, IndexError, TypeError):
-        pass
+def extract_text(response: ModelResponse | dict[str, object]) -> str:
+    if isinstance(response, dict):  # kept for legacy/test responses
+        choices = response.get("choices")
+        if isinstance(choices, list) and choices:
+            first = choices[0]
+            if isinstance(first, dict):
+                message = first.get("message")
+                if isinstance(message, dict):
+                    content = message.get("content")
+                    if isinstance(content, str):
+                        return content.strip()
+    else:
+        try:
+            content = response.choices[0].message.content
+            if isinstance(content, str):
+                return content.strip()
+        except (AttributeError, IndexError, TypeError):
+            pass
 
-    try:
-        content = response["choices"][0]["message"]["content"]
-        if isinstance(content, str):
-            return content.strip()
-    except (KeyError, IndexError, TypeError):
-        pass
-
-    logging.warning("Could not extract response text from model output.")
+    logger.warning("Could not extract response text from model output.")
     return ""
 
 
-def _is_rate_limit_error(exc: Exception) -> bool:
-    message = str(exc).lower()
-    status_code = getattr(exc, "status_code", None)
-    if status_code == 429:
-        return True
-    return "429" in message or "rate limit" in message or "too many requests" in message
-
-
 @retry(
-    retry=retry_if_exception(_is_rate_limit_error),
+    retry=retry_if_exception_type(
+        (
+            litellm_exceptions.RateLimitError,
+            litellm_exceptions.APIConnectionError,
+            litellm_exceptions.Timeout,
+        )
+    ),
     wait=wait_random_exponential(multiplier=0.5, min=0.5, max=8.0),
     stop=stop_after_attempt(4),
+    before_sleep=before_sleep_log(logger, logging.WARNING),
     reraise=True,
 )
-def _call_completion(kwargs: dict[str, Any]) -> Any:
-    return completion(**kwargs)
+def _call_completion(kwargs: dict[str, object]) -> ModelResponse:
+    return cast(ModelResponse, completion(**kwargs))
 
 
 def _compute_accuracy(case: PromptCase, output: str) -> float:
@@ -65,7 +71,7 @@ def _evaluate_prompt(
     api_base: str | None,
     api_key: str | None,
 ) -> tuple[str, float, float | None, float]:
-    kwargs: dict[str, Any] = {
+    kwargs: dict[str, object] = {
         "model": model,
         "messages": [
             {"role": "system", "content": "You are an evaluation assistant. Return concise answers only."},

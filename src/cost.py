@@ -1,10 +1,10 @@
 import logging
-from typing import Any
 
 from litellm import completion_cost
+from litellm.types.utils import ModelResponse
 
 
-def estimate_dummy_cost(response: Any) -> float | None:
+def estimate_dummy_cost(response: ModelResponse | dict[str, object]) -> float | None:
     usage = None
     if hasattr(response, "usage"):
         usage = response.usage
@@ -30,7 +30,7 @@ def estimate_dummy_cost(response: Any) -> float | None:
     return total_tokens * 0.000001
 
 
-def get_cost_usd(response: Any) -> float | None:
+def get_cost_usd(response: ModelResponse | dict[str, object]) -> float | None:
     try:
         cost = completion_cost(completion_response=response)
         if cost is not None:

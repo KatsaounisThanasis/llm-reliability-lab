@@ -1,6 +1,6 @@
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any
+from typing import cast
 
 
 @dataclass(frozen=True)
@@ -39,8 +39,8 @@ class PromptResult:
     accuracy: float
     error: str | None = None
 
-    def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+    def to_dict(self) -> dict[str, object]:
+        return cast(dict[str, object], asdict(self))
 
 
 @dataclass
@@ -56,7 +56,5 @@ class ModelSummary:
     total_requests: int
     cases: list[PromptResult]
 
-    def to_dict(self) -> dict[str, Any]:
-        payload = asdict(self)
-        payload["cases"] = [case.to_dict() for case in self.cases]
-        return payload
+    def to_dict(self) -> dict[str, object]:
+        return cast(dict[str, object], asdict(self))

@@ -51,6 +51,19 @@ python3 src/eval_runner.py \
 - `--report-dir`: Report output directory (fallback: `REPORT_DIR`, default: `reports/`)
 - `--no-color`: Disable ANSI color output
 
+## 🧾 Dataset Schema
+Each dataset entry supports:
+
+```json
+{
+  "prompt": "string (non-empty)",
+  "expected": "string (non-empty)",
+  "match_mode": "exact | contains"
+}
+```
+
+- `match_mode` is optional and defaults to `exact`.
+
 ## 🧪 CI/CD Gate Behavior
 - The run **fails** only when **all models** fail thresholds.
 - The run **passes** when at least one model passes.

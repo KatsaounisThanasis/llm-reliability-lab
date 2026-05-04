@@ -25,7 +25,12 @@ jobs:
           cache: 'pip'
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r requirements.txt ruff mypy
+
+      - name: Run Linting and Type Checking
+        run: |
+          ruff check src tests
+          mypy src
 
       - name: Run LLM Evaluation
         env:

@@ -1,7 +1,6 @@
 import argparse
 import os
 from pathlib import Path
-from typing import Any
 
 from entities import EvalConfig, Thresholds
 from presentation import Ansi
@@ -14,8 +13,12 @@ def parse_models(raw_models: str) -> list[str]:
     return models
 
 
-def _pick_value(cli_value: Any, env_key: str, default: Any) -> Any:
+def _pick_str(cli_value: str | None, env_key: str, default: str) -> str:
     return cli_value if cli_value is not None else os.getenv(env_key, default)
+
+
+def _pick_optional_str(cli_value: str | None, env_key: str) -> str | None:
+    return cli_value if cli_value is not None else os.getenv(env_key)
 
 
 def parse_args() -> argparse.Namespace:
@@ -34,20 +37,36 @@ def parse_args() -> argparse.Namespace:
 
 
 def resolve_config(args: argparse.Namespace, project_root: Path) -> EvalConfig:
-    dataset_raw = _pick_value(args.dataset, "DATASET_PATH", str(project_root / "data" / "dataset.json"))
-    models_raw = _pick_value(args.models, "LITELLM_MODEL", "gemini/gemini-2.5-flash")
-    api_base = _pick_value(args.api_base, "LITELLM_API_BASE", None)
+    dataset_raw = _pick_str(args.dataset, "DATASET_PATH", str(project_root / "data" / "dataset.json"))
+    models_raw = _pick_str(args.models, "LITELLM_MODEL", "gemini/gemini-2.5-flash")
+    api_base = _pick_optional_str(args.api_base, "LITELLM_API_BASE")
     api_key = (
         args.api_key
         or os.getenv("LITELLM_API_KEY")
         or os.getenv("GEMINI_API_KEY")
         or os.getenv("OPENAI_API_KEY")
     )
-    accuracy_threshold = float(_pick_value(args.accuracy_threshold, "ACCURACY_THRESHOLD", "0.8"))
-    latency_threshold = float(_pick_value(args.latency_threshold, "LATENCY_THRESHOLD", "2.0"))
-    cost_threshold = float(_pick_value(args.cost_threshold, "COST_THRESHOLD", "0.001"))
-    error_rate_threshold = float(_pick_value(args.error_rate_threshold, "ERROR_RATE_THRESHOLD", "0.0"))
-    report_dir = Path(_pick_value(args.report_dir, "REPORT_DIR", str(project_root / "reports")))
+    accuracy_threshold = (
+        args.accuracy_threshold
+        if args.accuracy_threshold is not None
+        else float(os.getenv("ACCURACY_THRESHOLD", "0.8"))
+    )
+    latency_threshold = (
+        args.latency_threshold
+        if args.latency_threshold is not None
+        else float(os.getenv("LATENCY_THRESHOLD", "2.0"))
+    )
+    cost_threshold = (
+        args.cost_threshold
+        if args.cost_threshold is not None
+        else float(os.getenv("COST_THRESHOLD", "0.001"))
+    )
+    error_rate_threshold = (
+        args.error_rate_threshold
+        if args.error_rate_threshold is not None
+        else float(os.getenv("ERROR_RATE_THRESHOLD", "0.0"))
+    )
+    report_dir = Path(_pick_str(args.report_dir, "REPORT_DIR", str(project_root / "reports")))
 
     return EvalConfig(
         dataset_path=Path(dataset_raw),
