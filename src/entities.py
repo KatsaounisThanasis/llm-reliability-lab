@@ -7,6 +7,7 @@ from typing import Any
 class PromptCase:
     prompt: str
     expected: str
+    match_mode: str = "exact"
 
 
 @dataclass(frozen=True)
@@ -25,7 +26,6 @@ class EvalConfig:
     api_key: str | None
     thresholds: Thresholds
     report_dir: Path
-    num_retries: int
 
 
 @dataclass

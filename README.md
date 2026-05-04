@@ -47,6 +47,7 @@ python3 src/eval_runner.py \
 - `--accuracy-threshold`: Min average accuracy (fallback: `ACCURACY_THRESHOLD`)
 - `--latency-threshold`: Max average latency in seconds (fallback: `LATENCY_THRESHOLD`)
 - `--cost-threshold`: Max average cost in USD (fallback: `COST_THRESHOLD`)
+- `--error-rate-threshold`: Max failed request ratio (fallback: `ERROR_RATE_THRESHOLD`, default: `0.0`)
 - `--report-dir`: Report output directory (fallback: `REPORT_DIR`, default: `reports/`)
 - `--no-color`: Disable ANSI color output
 

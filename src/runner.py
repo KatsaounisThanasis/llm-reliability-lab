@@ -3,8 +3,13 @@ import time
 from typing import Any
 
 from litellm import completion
+from tenacity import (
+    retry,
+    retry_if_exception,
+    stop_after_attempt,
+    wait_random_exponential,
+)
 
-from cli import Ansi
 from cost import get_cost_usd
 from entities import EvalConfig, ModelSummary, PromptCase, PromptResult
 
@@ -28,12 +33,37 @@ def extract_text(response: Any) -> str:
     return ""
 
 
+def _is_rate_limit_error(exc: Exception) -> bool:
+    message = str(exc).lower()
+    status_code = getattr(exc, "status_code", None)
+    if status_code == 429:
+        return True
+    return "429" in message or "rate limit" in message or "too many requests" in message
+
+
+@retry(
+    retry=retry_if_exception(_is_rate_limit_error),
+    wait=wait_random_exponential(multiplier=0.5, min=0.5, max=8.0),
+    stop=stop_after_attempt(4),
+    reraise=True,
+)
+def _call_completion(kwargs: dict[str, Any]) -> Any:
+    return completion(**kwargs)
+
+
+def _compute_accuracy(case: PromptCase, output: str) -> float:
+    expected = case.expected.strip().lower()
+    candidate = output.strip().lower()
+    if case.match_mode == "contains":
+        return 1.0 if expected in candidate else 0.0
+    return 1.0 if expected == candidate else 0.0
+
+
 def _evaluate_prompt(
     case: PromptCase,
     model: str,
     api_base: str | None,
     api_key: str | None,
-    num_retries: int,
 ) -> tuple[str, float, float | None, float]:
     kwargs: dict[str, Any] = {
         "model": model,
@@ -42,7 +72,6 @@ def _evaluate_prompt(
             {"role": "user", "content": case.prompt},
         ],
         "temperature": 0,
-        "num_retries": num_retries,
     }
 
     if api_base:
@@ -51,21 +80,19 @@ def _evaluate_prompt(
         kwargs["api_key"] = api_key
 
     start = time.perf_counter()
-    response = completion(**kwargs)
+    response = _call_completion(kwargs)
     latency = time.perf_counter() - start
 
     output = extract_text(response)
     cost = get_cost_usd(response)
-    accuracy = 1.0 if case.expected.strip().lower() == output.strip().lower() else 0.0
+    accuracy = _compute_accuracy(case, output)
     return output, latency, cost, accuracy
 
 
-def evaluate_model(model: str, dataset: list[PromptCase], config: EvalConfig, ansi: Ansi) -> ModelSummary:
-    print(f"\nRunning evaluation with model={ansi.info(model)}")
-    print("-" * 72)
-
+def evaluate_model(model: str, dataset: list[PromptCase], config: EvalConfig) -> ModelSummary:
     results: list[PromptResult] = []
     error_count = 0
+
     for idx, case in enumerate(dataset, start=1):
         try:
             output, latency, cost, accuracy = _evaluate_prompt(
@@ -73,7 +100,6 @@ def evaluate_model(model: str, dataset: list[PromptCase], config: EvalConfig, an
                 model=model,
                 api_base=config.api_base,
                 api_key=config.api_key,
-                num_retries=config.num_retries,
             )
             result = PromptResult(
                 index=idx,
@@ -97,17 +123,6 @@ def evaluate_model(model: str, dataset: list[PromptCase], config: EvalConfig, an
                 error=str(exc),
             )
         results.append(result)
-
-        cost_text = f"${result.cost_usd:.6f}" if result.cost_usd is not None else "n/a"
-        latency_text = f"{result.latency_seconds:.3f}s" if result.latency_seconds is not None else "n/a"
-        row = (
-            f"[{result.index}] latency={latency_text} | cost={cost_text} | "
-            f"accuracy={result.accuracy:.0f} | expected='{result.expected}'"
-        )
-        if result.error:
-            print(ansi.warning(f"{row} | error={result.error}"))
-        else:
-            print(row)
 
     successful_latency = [r.latency_seconds for r in results if r.latency_seconds is not None]
     successful_cost = [r.cost_usd for r in results if r.cost_usd is not None]
@@ -143,27 +158,13 @@ def evaluate_model(model: str, dataset: list[PromptCase], config: EvalConfig, an
             f"error rate {error_rate:.3f} > threshold {config.thresholds.error_rate_max:.3f}"
         )
 
-    passed = not failures
-    status = ansi.success("PASSED") if passed else ansi.error("FAILED")
-    avg_latency_text = f"{avg_latency:.3f}s" if avg_latency is not None else "n/a"
-    avg_cost_text = f"${avg_cost:.6f}" if avg_cost is not None else "n/a"
-
-    print("-" * 72)
-    print(f"Average Latency : {avg_latency_text}")
-    print(f"Average Cost    : {avg_cost_text}")
-    print(f"Average Accuracy: {avg_accuracy:.3f}")
-    print(f"Error Rate      : {error_rate:.3f}")
-    print(f"Result          : {status}")
-    for reason in failures:
-        print(f"- {reason}")
-
     return ModelSummary(
         model=model,
         avg_latency_seconds=avg_latency,
         avg_cost_usd=avg_cost,
         avg_accuracy=avg_accuracy,
         error_rate=error_rate,
-        passed=passed,
+        passed=not failures,
         failure_reasons=failures,
         successful_requests=len(results) - error_count,
         total_requests=len(results),
