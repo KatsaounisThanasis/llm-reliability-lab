@@ -34,10 +34,10 @@ jobs:
 
       - name: Run LLM Evaluation
         env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          LITELLM_MODEL: gemini/gemini-2.5-flash-lite
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          LITELLM_MODEL: "groq/llama-3.3-70b-versatile,groq/llama-3.1-8b-instant"
           ACCURACY_THRESHOLD: 0.8
-          LATENCY_THRESHOLD: 10.0
+          LATENCY_THRESHOLD: 3.0
           COST_THRESHOLD: 0.001
           ERROR_RATE_THRESHOLD: 0.0
         run: |
