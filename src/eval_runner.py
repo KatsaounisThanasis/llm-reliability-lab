@@ -1,3 +1,4 @@
+import argparse
 import json
 import os
 import sys
@@ -7,6 +8,50 @@ from pathlib import Path
 from typing import Any
 
 from litellm import completion, completion_cost
+
+
+class Ansi:
+    RESET = "\033[0m"
+    BOLD = "\033[1m"
+    RED = "\033[31m"
+    GREEN = "\033[32m"
+    YELLOW = "\033[33m"
+    CYAN = "\033[36m"
+
+
+def colorize(text: str, color: str, enabled: bool) -> str:
+    if not enabled:
+        return text
+    return f"{color}{text}{Ansi.RESET}"
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Run LLM reliability evaluation.")
+    parser.add_argument("--dataset", help="Path to dataset JSON file.")
+    parser.add_argument("--models", help="Comma-separated model list.")
+    parser.add_argument("--api-base", help="LiteLLM api_base override.")
+    parser.add_argument("--api-key", help="LiteLLM/OpenAI/Gemini API key.")
+    parser.add_argument("--accuracy-threshold", type=float, help="Minimum average accuracy.")
+    parser.add_argument("--latency-threshold", type=float, help="Maximum average latency in seconds.")
+    parser.add_argument("--cost-threshold", type=float, help="Maximum average cost in USD.")
+    parser.add_argument("--report-dir", help="Directory to write JSON reports.")
+    parser.add_argument("--no-color", action="store_true", help="Disable ANSI colored output.")
+    return parser.parse_args()
+
+
+def supports_color(no_color: bool) -> bool:
+    return (not no_color) and sys.stdout.isatty() and os.getenv("NO_COLOR") is None
+
+
+def pick_value(cli_value: Any, env_key: str, default: Any) -> Any:
+    return cli_value if cli_value is not None else os.getenv(env_key, default)
+
+
+def parse_models(raw_models: str) -> list[str]:
+    models = [m.strip() for m in raw_models.split(",") if m.strip()]
+    if not models:
+        raise ValueError("No models were provided. Use --models or LITELLM_MODEL.")
+    return models
 
 
 def load_dataset(dataset_path: Path) -> list[dict[str, str]]:
@@ -32,14 +77,14 @@ def extract_text(response: Any) -> str:
         content = response.choices[0].message.content
         if isinstance(content, str):
             return content.strip()
-    except Exception:
+    except (AttributeError, IndexError, TypeError):
         pass
 
     try:
         content = response["choices"][0]["message"]["content"]
         if isinstance(content, str):
             return content.strip()
-    except Exception:
+    except (KeyError, IndexError, TypeError):
         pass
 
     return ""
@@ -72,9 +117,8 @@ def get_cost_usd(response: Any) -> float:
         cost = completion_cost(completion_response=response)
         if cost is not None:
             return float(cost)
-    except Exception:
+    except (TypeError, ValueError, AttributeError, KeyError):
         pass
-
     return estimate_dummy_cost(response)
 
 
@@ -106,15 +150,7 @@ def evaluate_prompt(
     output = extract_text(response)
     cost = get_cost_usd(response)
     accuracy = 1.0 if expected.strip().lower() in output.lower() else 0.0
-
     return latency, cost, accuracy
-
-
-def parse_models(raw_models: str) -> list[str]:
-    models = [m.strip() for m in raw_models.split(",") if m.strip()]
-    if not models:
-        raise ValueError("LITELLM_MODEL is empty. Provide at least one model.")
-    return models
 
 
 def evaluate_model(
@@ -125,46 +161,62 @@ def evaluate_model(
     accuracy_threshold: float,
     latency_threshold: float,
     cost_threshold: float,
+    use_color: bool,
 ) -> dict[str, Any]:
     latencies: list[float] = []
     costs: list[float] = []
     accuracies: list[float] = []
     per_case: list[dict[str, Any]] = []
+    error_count = 0
 
-    print(f"\nRunning evaluation with model={model}")
+    print(f"\nRunning evaluation with model={colorize(model, Ansi.CYAN, use_color)}")
     print("-" * 72)
 
     for idx, item in enumerate(dataset, start=1):
         prompt = item["prompt"]
         expected = item["expected"]
+        case_error = None
 
-        latency, cost, accuracy = evaluate_prompt(
-            prompt=prompt,
-            expected=expected,
-            model=model,
-            api_base=api_base,
-            api_key=api_key,
-        )
+        try:
+            latency, cost, accuracy = evaluate_prompt(
+                prompt=prompt,
+                expected=expected,
+                model=model,
+                api_base=api_base,
+                api_key=api_key,
+            )
+        except Exception as exc:
+            latency = latency_threshold + 1.0
+            cost = cost_threshold + 0.001
+            accuracy = 0.0
+            case_error = str(exc)
+            error_count += 1
 
         latencies.append(latency)
         costs.append(cost)
         accuracies.append(accuracy)
-        per_case.append(
-            {
-                "index": idx,
-                "prompt": prompt,
-                "expected": expected,
-                "latency_seconds": latency,
-                "cost_usd": cost,
-                "accuracy": accuracy,
-            }
-        )
 
-        print(
+        row = {
+            "index": idx,
+            "prompt": prompt,
+            "expected": expected,
+            "latency_seconds": latency,
+            "cost_usd": cost,
+            "accuracy": accuracy,
+        }
+        if case_error:
+            row["error"] = case_error
+        per_case.append(row)
+
+        line = (
             f"[{idx}] latency={latency:.3f}s | cost=${cost:.6f} | "
             f"accuracy={accuracy:.0f} | expected='{expected}'"
         )
-        time.sleep(2)
+        if case_error:
+            line += f" | error={case_error}"
+            print(colorize(line, Ansi.YELLOW, use_color))
+        else:
+            print(line)
 
     avg_latency = sum(latencies) / len(latencies)
     avg_cost = sum(costs) / len(costs)
@@ -183,14 +235,17 @@ def evaluate_model(
         failures.append(
             f"average cost ${avg_cost:.6f} > threshold ${cost_threshold:.6f}"
         )
+    if error_count > 0:
+        failures.append(f"{error_count} request(s) failed during model evaluation")
 
     passed = len(failures) == 0
+    status = colorize("PASSED", Ansi.GREEN, use_color) if passed else colorize("FAILED", Ansi.RED, use_color)
 
     print("-" * 72)
     print(f"Average Latency : {avg_latency:.3f}s")
     print(f"Average Cost    : ${avg_cost:.6f}")
     print(f"Average Accuracy: {avg_accuracy:.3f}")
-    print(f"Result          : {'PASSED' if passed else 'FAILED'}")
+    print(f"Result          : {status}")
     if failures:
         for reason in failures:
             print(f"- {reason}")
@@ -210,24 +265,22 @@ def pick_winner(results: list[dict[str, Any]]) -> dict[str, Any]:
     return sorted(
         results,
         key=lambda r: (
-            -r["avg_accuracy"],     # highest accuracy first
-            r["avg_cost_usd"],      # then lowest cost
-            r["avg_latency_seconds"]  # then lowest latency
+            -r["avg_accuracy"],
+            r["avg_cost_usd"],
+            r["avg_latency_seconds"],
         ),
     )[0]
 
 
 def write_report(
-    project_root: Path,
+    report_dir: Path,
     results: list[dict[str, Any]],
     winner: dict[str, Any],
     thresholds: dict[str, float],
 ) -> Path:
-    reports_dir = project_root / "reports"
-    reports_dir.mkdir(parents=True, exist_ok=True)
-
+    report_dir.mkdir(parents=True, exist_ok=True)
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    report_path = reports_dir / f"eval_report_{ts}.json"
+    report_path = report_dir / f"eval_report_{ts}.json"
 
     report_data = {
         "generated_at_utc": ts,
@@ -247,25 +300,31 @@ def write_report(
 
 
 def main() -> None:
+    args = parse_args()
+    use_color = supports_color(args.no_color)
     project_root = Path(__file__).resolve().parents[1]
-    dataset_path = Path(os.getenv("DATASET_PATH", project_root / "data" / "dataset.json"))
 
-    raw_models = os.getenv("LITELLM_MODEL", "gemini/gemini-2.5-flash")
-    api_base = os.getenv("LITELLM_API_BASE")
+    dataset_raw = pick_value(args.dataset, "DATASET_PATH", str(project_root / "data" / "dataset.json"))
+    models_raw = pick_value(args.models, "LITELLM_MODEL", "gemini/gemini-2.5-flash")
+    api_base = pick_value(args.api_base, "LITELLM_API_BASE", None)
     api_key = (
-        os.getenv("LITELLM_API_KEY")
+        args.api_key
+        or os.getenv("LITELLM_API_KEY")
         or os.getenv("GEMINI_API_KEY")
         or os.getenv("OPENAI_API_KEY")
     )
-    accuracy_threshold = float(os.getenv("ACCURACY_THRESHOLD", "0.8"))
-    latency_threshold = float(os.getenv("LATENCY_THRESHOLD", "2.0"))
-    cost_threshold = float(os.getenv("COST_THRESHOLD", "0.001"))
+    accuracy_threshold = float(pick_value(args.accuracy_threshold, "ACCURACY_THRESHOLD", "0.8"))
+    latency_threshold = float(pick_value(args.latency_threshold, "LATENCY_THRESHOLD", "2.0"))
+    cost_threshold = float(pick_value(args.cost_threshold, "COST_THRESHOLD", "0.001"))
+    report_dir = Path(pick_value(args.report_dir, "REPORT_DIR", str(project_root / "reports")))
 
+    dataset_path = Path(dataset_raw)
     dataset = load_dataset(dataset_path)
-    models = parse_models(raw_models)
+    models = parse_models(models_raw)
 
-    print(f"Dataset: {dataset_path}")
-    print(f"Models : {', '.join(models)}")
+    print(colorize("LLM Reliability Benchmark Runner", Ansi.BOLD, use_color))
+    print(f"Dataset   : {dataset_path}")
+    print(f"Models    : {', '.join(models)}")
     print(
         "Thresholds: "
         f"accuracy>={accuracy_threshold:.3f}, "
@@ -282,13 +341,14 @@ def main() -> None:
             accuracy_threshold=accuracy_threshold,
             latency_threshold=latency_threshold,
             cost_threshold=cost_threshold,
+            use_color=use_color,
         )
         for model in models
     ]
 
     winner = pick_winner(results)
     report_path = write_report(
-        project_root=project_root,
+        report_dir=report_dir,
         results=results,
         winner=winner,
         thresholds={
@@ -300,15 +360,25 @@ def main() -> None:
 
     passed_models = [r for r in results if r["passed"]]
     print("\n" + "=" * 72)
-    print(f"Winner: {winner['model']}")
+    print(f"Winner: {colorize(winner['model'], Ansi.CYAN, use_color)}")
     print(f"Report: {report_path}")
 
     if not passed_models:
-        print("FAILED: all models failed thresholds.")
+        print(colorize("FAILED: all models failed thresholds.", Ansi.RED, use_color))
         sys.exit(1)
 
-    print(f"PASSED: {len(passed_models)}/{len(results)} model(s) passed thresholds.")
+    print(
+        colorize(
+            f"PASSED: {len(passed_models)}/{len(results)} model(s) passed thresholds.",
+            Ansi.GREEN,
+            use_color,
+        )
+    )
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        sys.exit(1)

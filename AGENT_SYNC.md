@@ -3,23 +3,20 @@
 Αυτό το αρχείο χρησιμοποιείται για την επικοινωνία μεταξύ της ομάδας: **Χρήστης (Thanos)**, **Gemini CLI (DevOps/Orchestrator)** και **GitHub Copilot (IDE Assistant)**.
 
 ## 📌 Τρέχον Status
-- **Φάση:** Advanced v2 (A/B Testing & Reports)
-- **Τελευταία Ενέργεια:** Ολοκληρώθηκε το MVP, έγινε push στο GitHub (Private Repo). Όλα τα CI/CD gates λειτουργούν.
-- **Επόμενο Βήμα:** Επέκταση του `eval_runner.py` για A/B Testing μεταξύ διαφορετικών μοντέλων και δημιουργία αναφορών.
+- **Φάση:** Refinement & Polish (Φάση 3)
+- **Τελευταία Ενέργεια:** Ολοκληρώθηκε το A/B Testing και το JSON Reporting.
+- **Επόμενο Βήμα:** Ο Thanos θέλει να "γυαλίσουμε" το project, να δώσουμε περισσότερες επιλογές (π.χ. CLI arguments, καλύτερα output) και ζητάει μια συνολική αξιολόγηση του κώδικα από το Copilot.
 
-## 🛠️ Tasks για το Copilot (Context - Φάση 2)
-Αγαπητό Copilot, προχωράμε στην "Advanced v2" φάση του έργου! Παρακαλώ τροποποίησε το `src/eval_runner.py` με τα εξής χαρακτηριστικά:
+## 🛠️ Tasks για το Copilot (Context - Φάση 3)
+Αγαπητό Copilot, ο Thanos πιστεύει ότι μπορούμε να κάνουμε το εργαλείο ακόμα πιο όμορφο και ευέλικτο. Παρακαλώ:
 
-1. **Υποστήριξη Πολλαπλών Μοντέλων (A/B Testing):**
-   - Η μεταβλητή περιβάλλοντος `LITELLM_MODEL` θα μπορεί πλέον να δέχεται πολλαπλά μοντέλα χωρισμένα με κόμμα (π.χ. `gemini/gemini-2.5-flash,gemini/gemini-1.5-flash`). Αν δεν έχει κόμμα, τρέχει όπως πριν.
-   - Το script πρέπει να τρέχει όλο το dataset για **κάθε** μοντέλο.
+1. **Αξιολόγηση Κώδικα (Review):**
+   - Κάνε ένα review στο `src/eval_runner.py`. Υπάρχουν σημεία για refactoring; (π.χ. καλύτερο exception handling, type hints, extraction σε classes/modules αν χρειάζεται). Άφησε τις προτάσεις σου σε ένα σχόλιο.
+2. **CLI & Επιλογές (Flexibility):**
+   - Αντί να βασιζόμαστε μόνο σε Environment Variables, πρόσθεσε `argparse` στο `eval_runner.py` ώστε ο χρήστης να μπορεί να περάσει arguments (π.χ. `--dataset data/dataset.json`, `--models gemini/gemini-2.5-flash`, `--accuracy-threshold 0.85`). Να κρατήσουμε βέβαια τα env vars ως fallback.
+3. **Καλύτερο Output (Aesthetics):**
+   - Κάνε το terminal output πιο "rich". Μπορείς να χρησιμοποιήσεις ANSI colors (π.χ. πράσινο για PASSED, κόκκινο για FAILED) για να φαίνεται πιο επαγγελματικό στο CLI.
+4. **README Polish:**
+   - Δώσε ένα προσχέδιο για το πώς μπορούμε να εμπλουτίσουμε το `README.md` με παραδείγματα εκτέλεσης (με τα νέα flags) και ίσως κάποια "Architecture/Flow" περιγραφή.
 
-2. **Δημιουργία Regression Report:**
-   - Μετά την ολοκλήρωση, αντί να τυπώνει μόνο στο terminal, να σώζει ένα JSON report στον φάκελο `reports/` (π.χ. `reports/eval_report_TIMESTAMP.json`). Ο φάκελος πρέπει να δημιουργείται αν δεν υπάρχει.
-   - Το report να περιέχει τα μέση metrics (accuracy, latency, cost) για κάθε μοντέλο και να υποδεικνύει τον "Νικητή" (αυτόν με το καλύτερο accuracy, ή σε περίπτωση ισοπαλίας, το χαμηλότερο cost/latency).
-
-3. **CI/CD Gate:**
-   - Το script συνεχίζει να κάνει `exit(1)` αν **ΟΛΑ** τα μοντέλα αποτύχουν να περάσουν τα thresholds. Αν έστω και ένα μοντέλο περνάει τα thresholds (Accuracy>=0.8, Latency<=2.0, Cost<=0.001), τότε θεωρείται επιτυχία (`exit(0)`).
-
-## 🚀 Σημείωση προς τον Thanos
-Μόλις το Copilot φτιάξει τον κώδικα, πες μου να το τεστάρω με 2 διαφορετικά μοντέλα (π.χ. Gemini 2.5 Flash vs Gemini 1.5 Flash)!
+Περιμένουμε τις προτάσεις και τον κώδικά σου!
