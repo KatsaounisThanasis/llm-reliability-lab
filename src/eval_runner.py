@@ -2,6 +2,7 @@ import json
 import os
 import sys
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -109,24 +110,28 @@ def evaluate_prompt(
     return latency, cost, accuracy
 
 
-def main() -> None:
-    project_root = Path(__file__).resolve().parents[1]
-    dataset_path = Path(os.getenv("DATASET_PATH", project_root / "data" / "dataset.json"))
+def parse_models(raw_models: str) -> list[str]:
+    models = [m.strip() for m in raw_models.split(",") if m.strip()]
+    if not models:
+        raise ValueError("LITELLM_MODEL is empty. Provide at least one model.")
+    return models
 
-    model = os.getenv("LITELLM_MODEL", "gemini/gemini-2.5-flash")
-    api_base = os.getenv("LITELLM_API_BASE")
-    api_key = os.getenv("LITELLM_API_KEY") or os.getenv("OPENAI_API_KEY")
-    accuracy_threshold = float(os.getenv("ACCURACY_THRESHOLD", "0.8"))
-    latency_threshold = float(os.getenv("LATENCY_THRESHOLD", "2.0"))
-    cost_threshold = float(os.getenv("COST_THRESHOLD", "0.001"))
 
-    dataset = load_dataset(dataset_path)
-
+def evaluate_model(
+    model: str,
+    dataset: list[dict[str, str]],
+    api_base: str | None,
+    api_key: str | None,
+    accuracy_threshold: float,
+    latency_threshold: float,
+    cost_threshold: float,
+) -> dict[str, Any]:
     latencies: list[float] = []
     costs: list[float] = []
     accuracies: list[float] = []
+    per_case: list[dict[str, Any]] = []
 
-    print(f"Running evaluation with model={model}, dataset={dataset_path}")
+    print(f"\nRunning evaluation with model={model}")
     print("-" * 72)
 
     for idx, item in enumerate(dataset, start=1):
@@ -144,26 +149,26 @@ def main() -> None:
         latencies.append(latency)
         costs.append(cost)
         accuracies.append(accuracy)
+        per_case.append(
+            {
+                "index": idx,
+                "prompt": prompt,
+                "expected": expected,
+                "latency_seconds": latency,
+                "cost_usd": cost,
+                "accuracy": accuracy,
+            }
+        )
 
         print(
             f"[{idx}] latency={latency:.3f}s | cost=${cost:.6f} | "
             f"accuracy={accuracy:.0f} | expected='{expected}'"
         )
+        time.sleep(2)
 
     avg_latency = sum(latencies) / len(latencies)
     avg_cost = sum(costs) / len(costs)
     avg_accuracy = sum(accuracies) / len(accuracies)
-
-    print("-" * 72)
-    print(f"Average Latency : {avg_latency:.3f}s")
-    print(f"Average Cost    : ${avg_cost:.6f}")
-    print(f"Average Accuracy: {avg_accuracy:.3f}")
-    print(
-        "Thresholds       : "
-        f"accuracy>={accuracy_threshold:.3f}, "
-        f"latency<={latency_threshold:.3f}s, "
-        f"cost<=${cost_threshold:.6f}"
-    )
 
     failures: list[str] = []
     if avg_accuracy < accuracy_threshold:
@@ -179,13 +184,130 @@ def main() -> None:
             f"average cost ${avg_cost:.6f} > threshold ${cost_threshold:.6f}"
         )
 
+    passed = len(failures) == 0
+
+    print("-" * 72)
+    print(f"Average Latency : {avg_latency:.3f}s")
+    print(f"Average Cost    : ${avg_cost:.6f}")
+    print(f"Average Accuracy: {avg_accuracy:.3f}")
+    print(f"Result          : {'PASSED' if passed else 'FAILED'}")
     if failures:
-        print("FAILED:")
         for reason in failures:
             print(f"- {reason}")
+
+    return {
+        "model": model,
+        "avg_latency_seconds": avg_latency,
+        "avg_cost_usd": avg_cost,
+        "avg_accuracy": avg_accuracy,
+        "passed": passed,
+        "failure_reasons": failures,
+        "cases": per_case,
+    }
+
+
+def pick_winner(results: list[dict[str, Any]]) -> dict[str, Any]:
+    return sorted(
+        results,
+        key=lambda r: (
+            -r["avg_accuracy"],     # highest accuracy first
+            r["avg_cost_usd"],      # then lowest cost
+            r["avg_latency_seconds"]  # then lowest latency
+        ),
+    )[0]
+
+
+def write_report(
+    project_root: Path,
+    results: list[dict[str, Any]],
+    winner: dict[str, Any],
+    thresholds: dict[str, float],
+) -> Path:
+    reports_dir = project_root / "reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+
+    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    report_path = reports_dir / f"eval_report_{ts}.json"
+
+    report_data = {
+        "generated_at_utc": ts,
+        "thresholds": thresholds,
+        "winner": {
+            "model": winner["model"],
+            "avg_accuracy": winner["avg_accuracy"],
+            "avg_latency_seconds": winner["avg_latency_seconds"],
+            "avg_cost_usd": winner["avg_cost_usd"],
+            "passed": winner["passed"],
+        },
+        "results": results,
+    }
+
+    report_path.write_text(json.dumps(report_data, indent=2), encoding="utf-8")
+    return report_path
+
+
+def main() -> None:
+    project_root = Path(__file__).resolve().parents[1]
+    dataset_path = Path(os.getenv("DATASET_PATH", project_root / "data" / "dataset.json"))
+
+    raw_models = os.getenv("LITELLM_MODEL", "gemini/gemini-2.5-flash")
+    api_base = os.getenv("LITELLM_API_BASE")
+    api_key = (
+        os.getenv("LITELLM_API_KEY")
+        or os.getenv("GEMINI_API_KEY")
+        or os.getenv("OPENAI_API_KEY")
+    )
+    accuracy_threshold = float(os.getenv("ACCURACY_THRESHOLD", "0.8"))
+    latency_threshold = float(os.getenv("LATENCY_THRESHOLD", "2.0"))
+    cost_threshold = float(os.getenv("COST_THRESHOLD", "0.001"))
+
+    dataset = load_dataset(dataset_path)
+    models = parse_models(raw_models)
+
+    print(f"Dataset: {dataset_path}")
+    print(f"Models : {', '.join(models)}")
+    print(
+        "Thresholds: "
+        f"accuracy>={accuracy_threshold:.3f}, "
+        f"latency<={latency_threshold:.3f}s, "
+        f"cost<=${cost_threshold:.6f}"
+    )
+
+    results = [
+        evaluate_model(
+            model=model,
+            dataset=dataset,
+            api_base=api_base,
+            api_key=api_key,
+            accuracy_threshold=accuracy_threshold,
+            latency_threshold=latency_threshold,
+            cost_threshold=cost_threshold,
+        )
+        for model in models
+    ]
+
+    winner = pick_winner(results)
+    report_path = write_report(
+        project_root=project_root,
+        results=results,
+        winner=winner,
+        thresholds={
+            "accuracy_threshold": accuracy_threshold,
+            "latency_threshold_seconds": latency_threshold,
+            "cost_threshold_usd": cost_threshold,
+        },
+    )
+
+    passed_models = [r for r in results if r["passed"]]
+    print("\n" + "=" * 72)
+    print(f"Winner: {winner['model']}")
+    print(f"Report: {report_path}")
+
+    if not passed_models:
+        print("FAILED: all models failed thresholds.")
         sys.exit(1)
 
-    print("PASSED: all thresholds satisfied.")
+    print(f"PASSED: {len(passed_models)}/{len(results)} model(s) passed thresholds.")
 
 
 if __name__ == "__main__":

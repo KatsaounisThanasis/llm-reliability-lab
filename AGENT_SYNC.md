@@ -3,35 +3,23 @@
 Αυτό το αρχείο χρησιμοποιείται για την επικοινωνία μεταξύ της ομάδας: **Χρήστης (Thanos)**, **Gemini CLI (DevOps/Orchestrator)** και **GitHub Copilot (IDE Assistant)**.
 
 ## 📌 Τρέχον Status
-- **Φάση:** Υλοποίηση CI/CD & Run Instructions
-- **Τελευταία Ενέργεια:** Το Copilot υλοποίησε το MVP (`eval_runner.py` & `dataset.json`). Το Gemini CLI προσάρμοσε το script για να μην κρασάρει το PC, άλλαξε το default μοντέλο σε API (Gemini/LiteLLM) και πρόσθεσε το GitHub Action.
+- **Φάση:** Advanced v2 (A/B Testing & Reports)
+- **Τελευταία Ενέργεια:** Ολοκληρώθηκε το MVP, έγινε push στο GitHub (Private Repo). Όλα τα CI/CD gates λειτουργούν.
+- **Επόμενο Βήμα:** Επέκταση του `eval_runner.py` για A/B Testing μεταξύ διαφορετικών μοντέλων και δημιουργία αναφορών.
 
-## ⚠️ Αποφυγή CPU Load (Σημείωση για τον Thanos)
-Την προηγούμενη φορά που χρησιμοποιήσαμε `litellm`, το PC κράσαρε με 100% CPU επειδή το default μοντέλο ήταν **τοπικό (Ollama)**. 
-Το LiteLLM από μόνο του είναι μια πανάλαφρη βιβλιοθήκη Python (δεν τρώει πόρους). Το πρόβλημα ήταν ότι καλούσε τοπικό AI Engine (Ollama). 
-**Λύση:** Άλλαξα το default μοντέλο στο `eval_runner.py` σε `gemini/gemini-1.5-flash`. Έτσι τα requests θα γίνονται μέσω API, η CPU σου θα μείνει στο 0% και όλα θα είναι αστραπιαία!
+## 🛠️ Tasks για το Copilot (Context - Φάση 2)
+Αγαπητό Copilot, προχωράμε στην "Advanced v2" φάση του έργου! Παρακαλώ τροποποίησε το `src/eval_runner.py` με τα εξής χαρακτηριστικά:
 
-## 🚀 Πώς να τρέξεις το Evaluation (Run Instructions)
+1. **Υποστήριξη Πολλαπλών Μοντέλων (A/B Testing):**
+   - Η μεταβλητή περιβάλλοντος `LITELLM_MODEL` θα μπορεί πλέον να δέχεται πολλαπλά μοντέλα χωρισμένα με κόμμα (π.χ. `gemini/gemini-2.5-flash,gemini/gemini-1.5-flash`). Αν δεν έχει κόμμα, τρέχει όπως πριν.
+   - Το script πρέπει να τρέχει όλο το dataset για **κάθε** μοντέλο.
 
-1. **Δημιούργησε Virtual Environment & Κάνε Install:**
-   ```bash
-   python -m venv .venv
-   source .venv/bin/activate
-   pip install -r requirements.txt
-   ```
+2. **Δημιουργία Regression Report:**
+   - Μετά την ολοκλήρωση, αντί να τυπώνει μόνο στο terminal, να σώζει ένα JSON report στον φάκελο `reports/` (π.χ. `reports/eval_report_TIMESTAMP.json`). Ο φάκελος πρέπει να δημιουργείται αν δεν υπάρχει.
+   - Το report να περιέχει τα μέση metrics (accuracy, latency, cost) για κάθε μοντέλο και να υποδεικνύει τον "Νικητή" (αυτόν με το καλύτερο accuracy, ή σε περίπτωση ισοπαλίας, το χαμηλότερο cost/latency).
 
-2. **Τρέξε το Script με API Key (Ασφαλής τρόπος):**
-   ```bash
-   export GEMINI_API_KEY="το_api_key_σου_εδω"
-   python src/eval_runner.py
-   ```
-   *(Σημείωση: Αν δεν έχεις Gemini API Key, μπορείς να βάλεις `export OPENAI_API_KEY="key"` και να τρέξεις με `export LITELLM_MODEL="gpt-3.5-turbo"`)*
+3. **CI/CD Gate:**
+   - Το script συνεχίζει να κάνει `exit(1)` αν **ΟΛΑ** τα μοντέλα αποτύχουν να περάσουν τα thresholds. Αν έστω και ένα μοντέλο περνάει τα thresholds (Accuracy>=0.8, Latency<=2.0, Cost<=0.001), τότε θεωρείται επιτυχία (`exit(0)`).
 
-## 🚦 Baseline Thresholds & Fail Conditions
-Το pipeline (και το τοπικό σου τρέξιμο) θα γίνει `FAILED` αν το `Average Accuracy` πέσει κάτω από `0.8` (80%).
-Τα cost/latency metrics τυπώνονται για observability, αλλά στο επόμενο βήμα μπορούμε να προσθέσουμε fail conditions και για αυτά (π.χ. `max_latency=2.0s`).
-
-## 🛠️ Tasks για το Copilot (Next Steps)
-Αγαπητό Copilot, όταν ο Thanos ζητήσει το επόμενο feature, παρακαλώ:
-1. Πρόσθεσε thresholds για **Latency** και **Cost** στο `eval_runner.py` (π.χ. `LATENCY_THRESHOLD=2.0` seconds).
-2. Αν το μέσο latency είναι πάνω από 2.0s, το script να κάνει επίσης `exit(1)`.
+## 🚀 Σημείωση προς τον Thanos
+Μόλις το Copilot φτιάξει τον κώδικα, πες μου να το τεστάρω με 2 διαφορετικά μοντέλα (π.χ. Gemini 2.5 Flash vs Gemini 1.5 Flash)!
