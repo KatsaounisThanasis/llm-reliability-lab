@@ -1,7 +1,20 @@
+import contextlib
 import logging
+import os
 
 from litellm import completion_cost
 from litellm.types.utils import ModelResponse
+
+
+@contextlib.contextmanager
+def _silenced_stdio():
+    """Silence stdout/stderr while litellm internals may print provider help text."""
+    devnull = open(os.devnull, "w")
+    try:
+        with contextlib.redirect_stdout(devnull), contextlib.redirect_stderr(devnull):
+            yield
+    finally:
+        devnull.close()
 
 
 def estimate_dummy_cost(response: ModelResponse | dict[str, object]) -> float | None:
@@ -32,7 +45,8 @@ def estimate_dummy_cost(response: ModelResponse | dict[str, object]) -> float | 
 
 def get_cost_usd(response: ModelResponse | dict[str, object]) -> float | None:
     try:
-        cost = completion_cost(completion_response=response)
+        with _silenced_stdio():
+            cost = completion_cost(completion_response=response)
         if cost is not None:
             return float(cost)
     except Exception as exc:

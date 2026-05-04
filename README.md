@@ -62,6 +62,10 @@ python3 src/eval_runner.py \
   --error-rate-threshold 0.0
 ```
 
+## Demo
+
+![Live A/B evaluation: Llama 3.3 70B vs 3.1 8B on Groq](.demo/eval.gif)
+
 ## Sample output
 
 ```
