@@ -30,3 +30,6 @@ reports/*.json
 # Meta
 AGENT_SYNC.md
 .demo/eval_lastframe.png
+
+# Throwaway vhs artifacts from .demo/shot*.tape
+shot*_out.gif
