@@ -35,6 +35,9 @@ def get_cost_usd(response: ModelResponse | dict[str, object]) -> float | None:
         cost = completion_cost(completion_response=response)
         if cost is not None:
             return float(cost)
-    except (TypeError, ValueError, AttributeError, KeyError):
-        logging.warning("litellm completion_cost unavailable for this response; using fallback.")
+    except Exception as exc:
+        logging.warning(
+            "litellm completion_cost unavailable for this response (%s); using fallback.",
+            type(exc).__name__,
+        )
     return estimate_dummy_cost(response)

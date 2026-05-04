@@ -1,0 +1,146 @@
+{
+  "generated_at_utc": "20260504T131155Z",
+  "thresholds": {
+    "accuracy_threshold": 0.8,
+    "latency_threshold_seconds": 3.0,
+    "cost_threshold_usd": 0.001,
+    "error_rate_threshold": 0.0
+  },
+  "all_failed": false,
+  "winner": {
+    "model": "groq/llama-3.3-70b-versatile",
+    "avg_accuracy": 1.0,
+    "avg_latency_seconds": 0.15681798679870554,
+    "avg_cost_usd": 5.9800000000000003e-05,
+    "error_rate": 0.0,
+    "passed": true
+  },
+  "results": [
+    {
+      "model": "groq/llama-3.3-70b-versatile",
+      "avg_latency_seconds": 0.15681798679870554,
+      "avg_cost_usd": 5.9800000000000003e-05,
+      "avg_accuracy": 1.0,
+      "error_rate": 0.0,
+      "passed": true,
+      "failure_reasons": [],
+      "successful_requests": 5,
+      "total_requests": 5,
+      "cases": [
+        {
+          "index": 1,
+          "prompt": "Respond with exactly: blue",
+          "expected": "blue",
+          "response_text": "blue",
+          "latency_seconds": 0.29785135299971444,
+          "cost_usd": 5.3e-05,
+          "accuracy": 1.0,
+          "error": null
+        },
+        {
+          "index": 2,
+          "prompt": "What is 2 + 2? Respond with one number only.",
+          "expected": "4",
+          "response_text": "4",
+          "latency_seconds": 0.1281763469996804,
+          "cost_usd": 6.2e-05,
+          "accuracy": 1.0,
+          "error": null
+        },
+        {
+          "index": 3,
+          "prompt": "Return the lowercase word 'devops' exactly.",
+          "expected": "devops",
+          "response_text": "devops",
+          "latency_seconds": 0.11617274499803898,
+          "cost_usd": 5.9e-05,
+          "accuracy": 1.0,
+          "error": null
+        },
+        {
+          "index": 4,
+          "prompt": "Complete the sequence 2, 4, 6, ? Answer with one number only.",
+          "expected": "8",
+          "response_text": "8",
+          "latency_seconds": 0.12610279599903151,
+          "cost_usd": 6.7e-05,
+          "accuracy": 1.0,
+          "error": null
+        },
+        {
+          "index": 5,
+          "prompt": "Return exactly this token: SRE_OK",
+          "expected": "SRE_OK",
+          "response_text": "SRE_OK",
+          "latency_seconds": 0.11578669299706235,
+          "cost_usd": 5.8e-05,
+          "accuracy": 1.0,
+          "error": null
+        }
+      ]
+    },
+    {
+      "model": "groq/llama-3.1-8b-instant",
+      "avg_latency_seconds": 0.09508078319922789,
+      "avg_cost_usd": 6.000000000000001e-05,
+      "avg_accuracy": 0.8,
+      "error_rate": 0.0,
+      "passed": true,
+      "failure_reasons": [],
+      "successful_requests": 5,
+      "total_requests": 5,
+      "cases": [
+        {
+          "index": 1,
+          "prompt": "Respond with exactly: blue",
+          "expected": "blue",
+          "response_text": "blue",
+          "latency_seconds": 0.08977345299717854,
+          "cost_usd": 5.3e-05,
+          "accuracy": 1.0,
+          "error": null
+        },
+        {
+          "index": 2,
+          "prompt": "What is 2 + 2? Respond with one number only.",
+          "expected": "4",
+          "response_text": "4",
+          "latency_seconds": 0.088118633000704,
+          "cost_usd": 6.2e-05,
+          "accuracy": 1.0,
+          "error": null
+        },
+        {
+          "index": 3,
+          "prompt": "Return the lowercase word 'devops' exactly.",
+          "expected": "devops",
+          "response_text": "devops",
+          "latency_seconds": 0.11922436299937544,
+          "cost_usd": 5.9e-05,
+          "accuracy": 1.0,
+          "error": null
+        },
+        {
+          "index": 4,
+          "prompt": "Complete the sequence 2, 4, 6, ? Answer with one number only.",
+          "expected": "8",
+          "response_text": "8.",
+          "latency_seconds": 0.09249162799824262,
+          "cost_usd": 6.8e-05,
+          "accuracy": 0.0,
+          "error": null
+        },
+        {
+          "index": 5,
+          "prompt": "Return exactly this token: SRE_OK",
+          "expected": "SRE_OK",
+          "response_text": "SRE_OK",
+          "latency_seconds": 0.08579583900063881,
+          "cost_usd": 5.8e-05,
+          "accuracy": 1.0,
+          "error": null
+        }
+      ]
+    }
+  ]
+}

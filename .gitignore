@@ -25,6 +25,7 @@ Thumbs.db
 
 # Reports
 reports/*.json
+!reports/sample_report.json
 
 # Meta
 AGENT_SYNC.md
