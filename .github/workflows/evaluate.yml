@@ -4,6 +4,9 @@ on:
   pull_request:
     branches:
       - main
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 concurrency:
@@ -11,7 +14,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  evaluate:
+  lint-and-test:
+    name: Lint, Type-check, Unit tests
     runs-on: ubuntu-latest
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     steps:
@@ -27,12 +31,47 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt ruff mypy
 
-      - name: Run Linting and Type Checking
+      - name: Ruff
+        run: ruff check src tests
+
+      - name: Mypy
+        run: mypy src
+
+      - name: Pytest
+        run: pytest -q
+
+  eval:
+    name: Live LLM Evaluation Gate
+    needs: lint-and-test
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Detect provider key
+        id: gate
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: |
-          ruff check src tests
-          mypy src
+          if [ -z "${GROQ_API_KEY}" ]; then
+            echo "::notice::GROQ_API_KEY secret is not configured — skipping live evaluation. Lint/type-check/tests still gate the build."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Run LLM Evaluation
+        if: steps.gate.outputs.skip != 'true'
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           LITELLM_MODEL: "groq/llama-3.3-70b-versatile,groq/llama-3.1-8b-instant"
@@ -50,7 +89,7 @@ jobs:
             --error-rate-threshold "$ERROR_RATE_THRESHOLD"
 
       - name: Upload Evaluation Report
-        if: always()
+        if: steps.gate.outputs.skip != 'true' && !cancelled()
         uses: actions/upload-artifact@v4
         with:
           name: eval-reports
