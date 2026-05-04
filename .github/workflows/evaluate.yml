@@ -1,0 +1,28 @@
+name: LLM Reliability Evaluation
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run LLM Evaluation
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          LITELLM_MODEL: gemini/gemini-2.5-flash
+          ACCURACY_THRESHOLD: 0.8
+        run: python src/eval_runner.py

@@ -1,0 +1,22 @@
+[
+  {
+    "prompt": "Respond with exactly: blue",
+    "expected": "blue"
+  },
+  {
+    "prompt": "What is 2 + 2? Respond with one number only.",
+    "expected": "4"
+  },
+  {
+    "prompt": "Return the lowercase word 'devops' exactly.",
+    "expected": "devops"
+  },
+  {
+    "prompt": "Complete the sequence 2, 4, 6, ? Answer with one number only.",
+    "expected": "8"
+  },
+  {
+    "prompt": "Return exactly this token: SRE_OK",
+    "expected": "SRE_OK"
+  }
+]
