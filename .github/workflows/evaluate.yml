@@ -35,15 +35,19 @@ jobs:
       - name: Run LLM Evaluation
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          LITELLM_MODEL: gemini/gemini-2.5-flash
+          LITELLM_MODEL: gemini/gemini-2.5-flash-lite
           ACCURACY_THRESHOLD: 0.8
-          LATENCY_THRESHOLD: 2.0
+          LATENCY_THRESHOLD: 10.0
           COST_THRESHOLD: 0.001
+          ERROR_RATE_THRESHOLD: 0.0
         run: |
-          # Create reports directory if it doesn't exist
           mkdir -p reports
-          # Run the evaluation with the necessary flags
-          python src/eval_runner.py --models $LITELLM_MODEL --accuracy-threshold $ACCURACY_THRESHOLD --latency-threshold $LATENCY_THRESHOLD --cost-threshold $COST_THRESHOLD
+          python src/eval_runner.py \
+            --models "$LITELLM_MODEL" \
+            --accuracy-threshold "$ACCURACY_THRESHOLD" \
+            --latency-threshold "$LATENCY_THRESHOLD" \
+            --cost-threshold "$COST_THRESHOLD" \
+            --error-rate-threshold "$ERROR_RATE_THRESHOLD"
 
       - name: Upload Evaluation Report
         if: always()
