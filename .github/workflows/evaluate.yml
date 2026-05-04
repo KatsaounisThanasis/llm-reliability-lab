@@ -4,6 +4,11 @@ on:
   pull_request:
     branches:
       - main
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   evaluate:
@@ -16,6 +21,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+          cache: 'pip'
 
       - name: Install dependencies
         run: pip install -r requirements.txt
@@ -25,4 +31,18 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           LITELLM_MODEL: gemini/gemini-2.5-flash
           ACCURACY_THRESHOLD: 0.8
-        run: python src/eval_runner.py
+          LATENCY_THRESHOLD: 2.0
+          COST_THRESHOLD: 0.001
+        run: |
+          # Create reports directory if it doesn't exist
+          mkdir -p reports
+          # Run the evaluation with the necessary flags
+          python src/eval_runner.py --models $LITELLM_MODEL --accuracy-threshold $ACCURACY_THRESHOLD --latency-threshold $LATENCY_THRESHOLD --cost-threshold $COST_THRESHOLD
+
+      - name: Upload Evaluation Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-reports
+          path: reports/*.json
+          retention-days: 14
